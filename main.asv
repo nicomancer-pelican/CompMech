@@ -33,28 +33,47 @@ EI = 1e2;
 q = 1e3;
 N = 200;
 
-displacements = linearFE(L, EA, EI, q, N);
-% displacements_NL = nonLinearFE(L, EA, EI, q, N);
+displacements = linearFE(L, EI, q, N);
+displacements_NL = nonLinearFE(L, EA, EI, q, N);
 
-vertical = displacements(1:2:2*N-2);
-moments  = gradient(displacements(2:2:2*N-2)*EI);
+% split rho into vertical displacements and moments
+disc = 0:L/(N-2):1;
+% linear
+vertical  = displacements_NL(1:2:2*N-2);
+rotations = displacements_NL(2:2:2*N-2);
+moments   = gradient(displacements_NL(2:2:2*N-2))*EI;
+% non linear
+vertical_NL  = displacements_NL(1:2:2*N-2);
+rotations_NL = displacements_NL(2:2:2*N-2);
+moments_NL   = gradient(displacements_NL(2:2:2*N-2))*EI;
 
+% analytical
+x   = 0:0.01:L;
+w   = (q/(24*EI)) * x.^2 .*(L^2 - 2*L*x + x.^2);
+wp  = (q/(24*EI)) *(2*x*L^2 - 6*L*x.^2 + 4*x.^3);
+wpp = (q/(24*EI)) *(2*L^2 - 12*L.*x + 12*x.^2);
 
-%% plots
-x = 0:0.01:L;
-w = 0.0001*((q/24*EI) * x.^2 .*(L^2 - 2*L*x + x.^2));
-% wp = (q/12*EI) .*x .*(L^2 - 2*L*x + x.*2) + (q/24*EI) .* (-2*L + 2*x);
-wpp = (q/EI)*(0.5 .*x.^2 - 0.5 * L .* x + (1/12)*L^2);
+% plots
 figure; hold on; grid on
 plot(x, w);
-plot([0:L/(N-2):1], vertical);
-% plot(wp);
+plot(disc, vertical);
+plot(disc, vertical_NL);
+legend('analytical', 'FE Linear', 'FE Non Linear')
+
+figure; hold on; grid on;
+plot(x, wp);
+plot(disc, rotations);
+plot(disc, rotations_NL);
+legend('analytical', 'FE', 'FE Non Linear')
+
 figure; hold on; grid on;
 plot(x, wpp);
-plot([0:L/(N-2):1], moments);
+plot(disc, moments);
+plot(disc, moments_NL);
+legend('analytical', 'FE', 'FE Non Linear')
 
 %% LINEAR FE SOLVER
-function rho = linearFE(L, EA, EI, q, N)
+function rho = linearFE(L, EI, q, N)
     % preallocate global stiffness matrix and global force vector 
     K   = zeros(2*N + 2, 2*N + 2);
     F   = zeros(2*N + 2, 1);
@@ -82,11 +101,11 @@ end
 function rho = nonLinearFE(L, EA, EI, q, N)
     % preallocate global stiffness matrices and global force vectors and
     % global displacement vector
-    Km_new = zeros(2*N + 2, 2*N + 2);
-    Kg_new = zeros(2*N + 2, 2*N + 2);
+    Km = zeros(2*N + 2, 2*N + 2);
+    Kg = zeros(2*N + 2, 2*N + 2);
     Fm = zeros(2*N + 2, 1);
     Fg = zeros(2*N + 2, 1);
-    rho = zeros(2*N + 2, 1);
+    rho_old = zeros(2*N + 2, 1);
     
     % element properties
     L_e = L / N; %element length assuming equal length elements
@@ -94,151 +113,58 @@ function rho = nonLinearFE(L, EA, EI, q, N)
     % set arbitrary error to jumpstart loop
     eps = 1;
     
-    % power counter for G_old
-    i = 0;
+    % setup
+    Km = globalK(Km, EI, N, L_e);
+    Fm = globalF(Fm,  q, N, L_e);
+    Kg = globalKgeom(rho_old, Kg, EI, N, L_e);
+    Fg = globalFgeom(rho_old, Fg, EA, N, L_e);
     
-    while eps > 0.01
-
-            % linear FE solver
-            elementKmat = Kmat(EI, L_e);
-            Km = globalK(Km_new, elementKmat, e);
-            elementFmat = consistentNodalForces(q, L_e);            
-            Fm = globalF(Fm, elementFmat, e);
-        for e = 1:N    
-            % non linear FE solver
-            elementKgeo = Kgeom(rho, EA, L);
-            Kg = globalK(Kg_new, elementKgeo, e);
-            elementFgeo = Fgeom(rho, EA, L);
-            Fg = globalF(Fg, elementFgeo, e); 
-        end
-        % apply BCs - fully fixed so remove 2 DoF at either end
-        Km = Km(3:2*N, 3:2*N);
-        Kg = Kg(3:2*N, 3:2*N);
-        Fm = Fm(3:2*N);
-        rho = rho(3:2*N);
-        
-        % initial functional G = K_M * rho - F_M
-        G = Km*rho + ((Km + Kg)^i)*rho- Fm;
-        
-        % run Newton Raphson iteration
-        rho_new = NewtonRaphson(rho, G, Km, Kg, Fm, EA, L);
+    % apply BCs
+    KmBC  = Km(3:2*N, 3:2*N);
+    KgBC  = Kg(3:2*N, 3:2*N);
+    FmBC  = Fm(3:2*N);
+    FgBC  = Fg(3:2*N);
+    rho_old_BC = rho_old(3:2*N);
+    
+    % functional
+    G_old = KmBC*rho_old_BC - FmBC - FgBC;
+    G_old_prime = KmBC + KgBC;
+    
+    while eps > 0.0001      
+        % Newton Raphson iteration
+        rho_new_BC = rho_old_BC - G_old_prime\G_old;
         
         % update rho (replace lost BC elements)
-        rho = [0; 0; rho_new; 0; 0];
+        rho_new = [0; 0; rho_new_BC; 0; 0];
         
         % calculate new Fg
-        for e = 1:N
-            rhoe = rho(e:e+3);
-            elementFgeo =  Fgeom(rhoe, EA, L);
-            Fg = globalF(Fg, elementFgeo, e);
-        end
+        Fg = globalFgeom(rho_new, Fg, EA, N, L_e);
+        Kg = globalKgeom(rho_new, Kg, EI, N, L_e);
         
-        % apply BC to Fg
-        Fg = Fg(3:2*N);
+        % apply BCs again
+        KgBC = Kg(3:2*N, 3:2*N);
+        FgBC = Fg(3:2*N);
+        rho_new_BC = rho_new(3:2*N);
         
         % new functional
-        G_new = Km*rho_new - Fm - Fg;
+        G_new = KmBC*rho_new_BC - FmBC - FgBC;
+        G_new_prime = KmBC + KgBC;
         
         % error calculation
-        eps = abs(G_new - G);
+        eps = max(abs(G_new - G_old));
         
-        % update other values
-        Km_new = zeros(2*N + 2, 2*N + 2);
-        Km_new(3:2*N, 3:2*N) = Km;
-        Kg_new = zeros(2*N + 2, 2*N + 2);
-        Kg_new(3:2*N, 3:2*N) = Kg;
-        Fm = [0; 0; Fm; 0; 0];
-        Fg = [0; 0; Fg; 0; 0];
-
+        % update
+        G_old = G_new;
+        G_old_prime = G_new_prime;
+        rho_old_BC = rho_new_BC;
     end
-    
-
-
-    %NON LINEAR
-%     rho = NewtonRaphson(Km, Fm, EA, L);
-% 
-%     % combine linear and nonlinear parts
-%     K = Km + Kg;
-%     F = Fm + Fg;
-%     
-%     
-%     % solve for unknown displacements and rotations
-%     rho = K\F;
+    rho = rho_new_BC;
 end
 
 
 
 
-%% UI sandbox
-% 
-% % setup window with grid, inputs panel and axes for results plot
-% fig = uifigure('Name', 'AERO96015 - FE Solver');
-% fig.Position = [200 200 1000 500];
-% grid1 = uigridlayout(fig,[2 1]);
-% grid1.RowHeight = {'1x',350};
-% p = uipanel(grid1,'Title','FE Solver');
-% ax = uiaxes(grid1);
-% ax.XGrid = 'on'; ax.YGrid = 'on';
-% 
-% % grid in the inputs panel
-% grid2 = uigridlayout(p,[4 3]);
-% grid2.RowHeight = {22,22,22,22,22,22};
-% grid2.ColumnWidth = {'1x','1x','1x','1x','1x','1x'};
-% 
-% % solver label
-% solver = uilabel(grid2);
-% solver.HorizontalAlignment = 'right';
-% solver.Text = 'Solver';
-% 
-% % solver drop-down
-% solver = uidropdown(grid2);
-% solver.Items = {'Linear', 'Geometrically Non-Linear'};
-% 
-% % beam length label
-% L = uilabel(grid2);
-% L.HorizontalAlignment = 'right';
-% L.Text = 'Beam length (m)';
-% 
-% % beam length field
-% L = uieditfield(grid2, 'numeric');
-% L.Value = 1;
-% 
-% % axial stiffness label
-% EA = uilabel(grid2);
-% EA.HorizontalAlignment = 'right';
-% EA.Text = 'Axial stiffness, EA (N)';
-% 
-% % axial stiffness field
-% EI = uieditfield(grid2, 'numeric');
-% EI.Value = 10e5;
-% 
-% % bending stiffness label
-% EI = uilabel(grid2);
-% EI.HorizontalAlignment = 'right';
-% EI.Text = 'Bending stiffness, EI (N m^2)';
-% 
-% % bending stiffness field
-% EI = uieditfield(grid2, 'numeric');
-% EI.Value = 10e2;
-% 
-% % distributed force label
-% q = uilabel(grid2);
-% q.HorizontalAlignment = 'right';
-% q.Text = 'Distributed force (kN/m)';
-% 
-% % distributed force field
-% q = uieditfield(grid2, 'numeric');
-% q.Value = 1;
-% 
-% % no. elements label
-% N = uilabel(grid2);
-% N.HorizontalAlignment = 'right';
-% N.Text = 'Number of elements';
-% 
-% % no. elements field
-% N = uieditfield(grid2, 'numeric');
-% N.Value = 1;
-% 
-% % Create a push button
-% btn = uibutton(fig,'push',...
-%                'ButtonPushedFcn', @(btn,event) linearFE(btn, L.Value, EA.Value, EI.Value, q.Value, N.value));
+
+
+
+

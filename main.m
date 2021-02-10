@@ -33,31 +33,47 @@ EI = 1e2;
 q = 1e3;
 N = 200;
 
-% displacements = linearFE(L, EA, EI, q, N);
-displacements = nonLinearFE(L, EA, EI, q, N);
+displacements = linearFE(L, EI, q, N);
+displacements_NL = nonLinearFE(L, EA, EI, q, N);
 
 % split rho into vertical displacements and moments
-vertical = displacements(1:2:2*N-2);
-moments  = gradient(displacements(2:2:2*N-2)*EI);
-
+disc = 0:L/(N-2):1;
+% linear
+vertical  = displacements_NL(1:2:2*N-2);
+rotations = displacements_NL(2:2:2*N-2);
+moments   = gradient(displacements_NL(2:2:2*N-2))*EI;
+% non linear
+vertical_NL  = displacements_NL(1:2:2*N-2);
+rotations_NL = displacements_NL(2:2:2*N-2);
+moments_NL   = gradient(displacements_NL(2:2:2*N-2))*EI;
 
 % analytical
-x = 0:0.01:L;
-w = 0.0001*((q/24*EI) * x.^2 .*(L^2 - 2*L*x + x.^2));
-% wp = (q/12*EI) .*x .*(L^2 - 2*L*x + x.*2) + (q/24*EI) .* (-2*L + 2*x);
-wpp = (q/EI)*(0.5 .*x.^2 - 0.5 * L .* x + (1/12)*L^2);
+x   = 0:0.01:L;
+w   = (q/(24*EI)) * x.^2 .*(L^2 - 2*L*x + x.^2);
+wp  = (q/(24*EI)) *(2*x*L^2 - 6*L*x.^2 + 4*x.^3);
+wpp = (q/(24*EI)) *(2*L^2 - 12*L.*x + 12*x.^2);
 
 % plots
 figure; hold on; grid on
 plot(x, w);
-plot([0:L/(N-2):1], vertical);
+plot(disc, vertical);
+plot(disc, vertical_NL);
+legend('analytical', 'FE Linear', 'FE Non Linear')
+
+figure; hold on; grid on;
+plot(x, wp);
+plot(disc, rotations);
+plot(disc, rotations_NL);
+legend('analytical', 'FE', 'FE Non Linear')
 
 figure; hold on; grid on;
 plot(x, wpp);
-plot([0:L/(N-2):1], moments);
+plot(disc, moments);
+plot(disc, moments_NL);
+legend('analytical', 'FE', 'FE Non Linear')
 
 %% LINEAR FE SOLVER
-function rho = linearFE(L, EA, EI, q, N)
+function rho = linearFE(L, EI, q, N)
     % preallocate global stiffness matrix and global force vector 
     K   = zeros(2*N + 2, 2*N + 2);
     F   = zeros(2*N + 2, 1);
@@ -85,11 +101,11 @@ end
 function rho = nonLinearFE(L, EA, EI, q, N)
     % preallocate global stiffness matrices and global force vectors and
     % global displacement vector
-    Km_new = zeros(2*N + 2, 2*N + 2);
-    Kg_new = zeros(2*N + 2, 2*N + 2);
+    Km = zeros(2*N + 2, 2*N + 2);
+    Kg = zeros(2*N + 2, 2*N + 2);
     Fm = zeros(2*N + 2, 1);
     Fg = zeros(2*N + 2, 1);
-    rho = zeros(2*N + 2, 1);
+    rho_old = zeros(2*N + 2, 1);
     
     % element properties
     L_e = L / N; %element length assuming equal length elements
@@ -97,45 +113,58 @@ function rho = nonLinearFE(L, EA, EI, q, N)
     % set arbitrary error to jumpstart loop
     eps = 1;
     
-    % power counter for G_old
-    i = 0;
+    % setup
+    Km = globalK(Km, EI, N, L_e);
+    Fm = globalF(Fm,  q, N, L_e);
+    Kg = globalKgeom(rho_old, Kg, EI, N, L_e);
+    Fg = globalFgeom(rho_old, Fg, EA, N, L_e);
     
-    while eps > 0.01
-        % linear part
-        Km = globalK(Km_new, EI, N, L_e);
-        Fm = globalF(Fm, q, N, L_e);
+    % apply BCs
+    KmBC  = Km(3:2*N, 3:2*N);
+    KgBC  = Kg(3:2*N, 3:2*N);
+    FmBC  = Fm(3:2*N);
+    FgBC  = Fg(3:2*N);
+    rho_old_BC = rho_old(3:2*N);
     
-        % non linear part
-        Kg = globalKgeom(rho, Kg_new, EA, N, L_e);
-        Fg = globalFgeom(rho, Fg, EA, N, L_e);
-
-        % apply BCs - fully fixed so remove 2 DoF at either end
-        KmBC  = Km(3:2*N, 3:2*N);
-        KgBC  = Kg(3:2*N, 3:2*N);
-        FmBC  = Fm(3:2*N);
-        rhoBC = rho(3:2*N);
-        
-        % initial functional G = K_M * rho - F_M
-        G = KmBC*rhoBC + ((KmBC + KgBC)^i)*rhoBC - FmBC;
-        
+    % functional
+    G_old = KmBC*rho_old_BC - FmBC - FgBC;
+    G_old_prime = KmBC + KgBC;
+    
+    while eps > 0.0001      
         % Newton Raphson iteration
-        rho_new = rhoBC - (KmBC + KgBC)\G;
+        rho_new_BC = rho_old_BC - G_old_prime\G_old;
         
         % update rho (replace lost BC elements)
-        rho = [0; 0; rho_new; 0; 0];
+        rho_new = [0; 0; rho_new_BC; 0; 0];
         
         % calculate new Fg
-        Fg = globalFgeom(rho, Fg, EA, N, L_e);
+        Fg = globalFgeom(rho_new, Fg, EA, N, L_e);
+        Kg = globalKgeom(rho_new, Kg, EI, N, L_e);
         
-        % apply BC to Fg
+        % apply BCs again
+        KgBC = Kg(3:2*N, 3:2*N);
         FgBC = Fg(3:2*N);
+        rho_new_BC = rho_new(3:2*N);
         
         % new functional
-        G_new = KmBC*rho_new - FmBC - FgBC;
+        G_new = KmBC*rho_new_BC - FmBC - FgBC;
+        G_new_prime = KmBC + KgBC;
         
         % error calculation
-        eps = abs(G_new - G);
-
-        i = i + 1;
+        eps = max(abs(G_new - G_old));
+        
+        % update
+        G_old = G_new;
+        G_old_prime = G_new_prime;
+        rho_old_BC = rho_new_BC;
     end
+    rho = rho_new_BC;
 end
+
+
+
+
+
+
+
+
