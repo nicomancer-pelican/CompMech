@@ -31,7 +31,7 @@ L = 1;
 EA = 1e5;
 EI = 1e2;
 q = 1e3;
-N = 20;
+N = 50;
 
 displacements = linearFE(L, EI, q, N);
 displacements_NL = nonLinearFE(L, EA, EI, q, N);
@@ -71,96 +71,6 @@ plot(x, wpp);
 plot(disc, moments);
 plot(disc, moments_NL);
 legend('analytical', 'FE', 'FE Non Linear')
-
-%% LINEAR FE SOLVER
-function rho = linearFE(L, EI, q, N)
-    % preallocate global stiffness matrix and global force vector 
-    K   = zeros(2*N + 2);
-    F   = zeros(2*N + 2, 1);
-    
-    % element properties
-    L_e = L / N; %element length assuming equal length elements
-
-    % stiffness matrix
-    K = globalK(K, EI, N, L_e);
-    
-    % forces vector
-    F = globalF(F, q, N, L_e);
-    
-    % apply BCs - fully fixed so remove 2 DoF at either end
-    K = K(3:2*N, 3:2*N);
-    F = F(3:2*N);
-    
-    % solve for unknown displacements and rotations
-    rho = K\F;
-end
-
-
-
-% %% NON-LINEAR FE SOLVER
-% function rho = nonLinearFE(L, EA, EI, q, N)
-%     % preallocate global stiffness matrices and global force vectors and
-%     % global displacement vector
-%     Km = zeros(2*N + 2, 2*N + 2);
-%     Kg = zeros(2*N + 2, 2*N + 2);
-%     Fm = zeros(2*N + 2, 1);
-%     Fg = zeros(2*N + 2, 1);
-%     rho_old = zeros(2*N + 2, 1);
-%     
-%     % element properties
-%     L_e = L / N; %element length assuming equal length elements
-%     
-%     % set arbitrary error to jumpstart loop
-%     eps = 1;
-%     
-%     % setup
-%     Km = globalK(Km, EI, N, L_e);
-%     Fm = globalF(Fm,  q, N, L_e);
-%     Kg = globalKgeom(rho_old, Kg, EA, N, L_e);
-%     Fg = globalFgeom(rho_old, Fg, EA, N, L_e);
-%     
-%     % apply BCs
-%     KmBC  = Km(3:2*N, 3:2*N);
-%     KgBC  = Kg(3:2*N, 3:2*N);
-%     FmBC  = Fm(3:2*N);
-%     FgBC  = Fg(3:2*N);
-%     rho_old_BC = rho_old(3:2*N);
-%     
-%     % functional
-%     G_old = KmBC*rho_old_BC - FmBC - FgBC;
-%     G_old_prime = KmBC + KgBC;
-%     
-%     while eps > 0.0001      
-%         % Newton Raphson iteration
-%         rho_new_BC = rho_old_BC - G_old_prime\G_old;
-%         
-%         % update rho (replace lost BC elements)
-%         rho_new = [0; 0; rho_new_BC; 0; 0];
-%         
-%         % calculate new Fg
-%         Fg = globalFgeom(rho_new, Fg, EA, N, L_e);
-%         Kg = globalKgeom(rho_new, Kg, EA, N, L_e);
-%         
-%         % apply BCs again
-%         KgBC = Kg(3:2*N, 3:2*N);
-%         FgBC = Fg(3:2*N);
-%         rho_new_BC = rho_new(3:2*N);
-%         
-%         % new functional
-%         G_new = KmBC*rho_new_BC - FmBC - FgBC;
-%         G_new_prime = KmBC + KgBC;
-%         
-%         % error calculation
-%         eps = max(abs(G_new - G_old));
-%         
-%         % update
-%         G_old = G_new;
-%         G_old_prime = G_new_prime;
-%         rho_old_BC = rho_new_BC;
-%     end
-%     rho = rho_new_BC;
-% end
-
 
 
 %% NON-LINEAR FE SOLVER 2
@@ -206,7 +116,6 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         
         % error calculation
         eps = max(abs(G_new - G_old));
-%         eps = max(abs(Fg_new - Fg));
     end
     rho = rho_new;
 end
