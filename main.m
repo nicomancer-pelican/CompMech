@@ -31,7 +31,7 @@ L = 1;
 EA = 1e5;
 EI = 1e2;
 q = 1e3;
-N = 200;
+N = 300;
 
 displacements = linearFE(L, EI, q, N);
 displacements_NL = nonLinearFE(L, EA, EI, q, N);
@@ -39,9 +39,9 @@ displacements_NL = nonLinearFE(L, EA, EI, q, N);
 % split rho into vertical displacements and moments
 disc = 0:L/(N-2):1;
 % linear
-vertical  = displacements_NL(1:2:2*N-2);
-rotations = displacements_NL(2:2:2*N-2);
-moments   = gradient(displacements_NL(2:2:2*N-2))*EI;
+vertical  = displacements(1:2:2*N-2);
+rotations = displacements(2:2:2*N-2);
+moments   = gradient(displacements(2:2:2*N-2))*EI;
 % non linear
 vertical_NL  = displacements_NL(1:2:2*N-2);
 rotations_NL = displacements_NL(2:2:2*N-2);
@@ -116,7 +116,7 @@ function rho = nonLinearFE(L, EA, EI, q, N)
     % setup
     Km = globalK(Km, EI, N, L_e);
     Fm = globalF(Fm,  q, N, L_e);
-    Kg = globalKgeom(rho_old, Kg, EI, N, L_e);
+    Kg = globalKgeom(rho_old, Kg, EA, N, L_e);
     Fg = globalFgeom(rho_old, Fg, EA, N, L_e);
     
     % apply BCs
@@ -139,7 +139,7 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         
         % calculate new Fg
         Fg = globalFgeom(rho_new, Fg, EA, N, L_e);
-        Kg = globalKgeom(rho_new, Kg, EI, N, L_e);
+        Kg = globalKgeom(rho_new, Kg, EA, N, L_e);
         
         % apply BCs again
         KgBC = Kg(3:2*N, 3:2*N);

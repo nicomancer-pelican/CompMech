@@ -39,8 +39,8 @@ displacements_NL = nonLinearFE(L, EA, EI, q, N);
 % split rho into vertical displacements and moments
 disc = 0:L/(N-2):1;
 % linear
-vertical  = displacements_NL(1:2:2*N-2);
-rotations = displacements_NL(2:2:2*N-2);
+vertical  = displacements(1:2:2*N-2);
+rotations = displacements(2:2:2*N-2);
 moments   = gradient(displacements_NL(2:2:2*N-2))*EI;
 % non linear
 vertical_NL  = displacements_NL(1:2:2*N-2);
