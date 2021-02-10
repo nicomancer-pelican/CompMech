@@ -31,10 +31,10 @@ L = 1;
 EA = 1e5;
 EI = 1e2;
 q = 1e3;
-N = 100;
+N = 200;
 
-% displacements = linearFE(L, EA, EI, q, N);
-displacements = nonLinearFE(L, EA, EI, q, N);
+displacements = linearFE(L, EA, EI, q, N);
+% displacements_NL = nonLinearFE(L, EA, EI, q, N);
 
 vertical = displacements(1:2:2*N-2);
 moments  = gradient(displacements(2:2:2*N-2)*EI);
@@ -98,14 +98,19 @@ function rho = nonLinearFE(L, EA, EI, q, N)
     i = 0;
     
     while eps > 0.01
-        % linear part
-        Km = globalK(Km_new, EI, N, L_e);
-        Fm = globalF(Fm, q, N, L_e);
-    
-        % non linear part
-        Kg = globalKgeom(rho, Kg_new, EA, N, L_e);
-        Fg = globalFgeom(rho, Fg, EA, N, L_e);
 
+            % linear FE solver
+            elementKmat = Kmat(EI, L_e);
+            Km = globalK(Km_new, elementKmat, e);
+            elementFmat = consistentNodalForces(q, L_e);            
+            Fm = globalF(Fm, elementFmat, e);
+        for e = 1:N    
+            % non linear FE solver
+            elementKgeo = Kgeom(rho, EA, L);
+            Kg = globalK(Kg_new, elementKgeo, e);
+            elementFgeo = Fgeom(rho, EA, L);
+            Fg = globalF(Fg, elementFgeo, e); 
+        end
         % apply BCs - fully fixed so remove 2 DoF at either end
         Km = Km(3:2*N, 3:2*N);
         Kg = Kg(3:2*N, 3:2*N);
@@ -122,7 +127,11 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         rho = [0; 0; rho_new; 0; 0];
         
         % calculate new Fg
-        Fg = globalFgeom(rho, Fg, EA, N, L_e);
+        for e = 1:N
+            rhoe = rho(e:e+3);
+            elementFgeo =  Fgeom(rhoe, EA, L);
+            Fg = globalF(Fg, elementFgeo, e);
+        end
         
         % apply BC to Fg
         Fg = Fg(3:2*N);
@@ -141,8 +150,20 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         Fm = [0; 0; Fm; 0; 0];
         Fg = [0; 0; Fg; 0; 0];
 
-        i = i + 1;
     end
+    
+
+
+    %NON LINEAR
+%     rho = NewtonRaphson(Km, Fm, EA, L);
+% 
+%     % combine linear and nonlinear parts
+%     K = Km + Kg;
+%     F = Fm + Fg;
+%     
+%     
+%     % solve for unknown displacements and rotations
+%     rho = K\F;
 end
 
 

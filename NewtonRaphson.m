@@ -1,31 +1,30 @@
-function r = NewtonRaphson(R_c, N, EA, L)
-    % starting values
-    R_0 = zeros(2*N, 1);
-    r_0 = zeros(2*N, 1);
-    
-    % initial tangent stiffness
-    K_t = Fgeomder(r_0, EA, L);
-    
-    % set arbitrary error to jumpstart loop
-    eps = 1;
-    while abs(eps) > 0.01
-        % first estimate
-        delta_R = R_c - R_0;
-        delta_r = K_t\delta_R;
-
-        % update displacement
-        r_e = r_0 + delta_r;
-
-        % use new displacement in function
-        F_NL = Fgeom(r_e, EA, L);
-
-        % check error
-        eps = abs(F_NL - R_c);
+function rho = NewtonRaphson(rho_old, G_old, Km, Kg, Fm, EA, L)
+%     while eps > 0.01
+        % tangent stiffness K_T = K_M + K_G
+%         Kg = Kgeom(rho_old, EA, L);
+        Kt = Km + Kg;
         
-        % new tangent stiffness
-        K_t = Fgeomder(r_0, EA, L);
-    end
-    r = r_e;
+        % update rho
+        rho_new = rho_old - Kt\G_old;
+        
+        % find delta rho
+        delta_rho = rho_new - rho_old;
+        
+        rho = rho_new;
+        
+%         % update functional
+%         G_new = Km*rho_new - Fm - Fgeom(rho_new, EA, L);
+%         
+%         % error calculation
+%         eps = abs(G_new - G_old);
+%         
+%         % update values
+%         G_old = G_new;
+%         rho_old = rho_new;
+%         
+%         % power counter
+%         i = i+1;
+%     end
 end
 
 %should output r as the displacements and K_t as the geometric stiffness

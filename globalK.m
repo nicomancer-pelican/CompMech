@@ -8,8 +8,11 @@
 %           e  --> element number
 %   OUTPUT: K  --> updated global stiffness matrix
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
-function K = globalK(K, Ke, e)
-    K(2*e-1 : 2*e+2, 2*e-1 : 2*e+2) = K(2*e-1 : 2*e+2, 2*e-1 : 2*e+2) + Ke;
+function K = globalK(K, EI, N, L_e)
+    for e = 1:N
+        Ke = Kmat(EI, L_e);
+        K(2*e-1 : 2*e+2, 2*e-1 : 2*e+2) = K(2*e-1 : 2*e+2, 2*e-1 : 2*e+2) + Ke;
+    end
 end
 
 % eof
