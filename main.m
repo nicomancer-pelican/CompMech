@@ -31,24 +31,27 @@ L = 1;
 EA = 1e5;
 EI = 1e2;
 q = 1e3;
-N = 100;
+N = 200;
 
 % displacements = linearFE(L, EA, EI, q, N);
 displacements = nonLinearFE(L, EA, EI, q, N);
 
+% split rho into vertical displacements and moments
 vertical = displacements(1:2:2*N-2);
 moments  = gradient(displacements(2:2:2*N-2)*EI);
 
 
-%% plots
+% analytical
 x = 0:0.01:L;
 w = 0.0001*((q/24*EI) * x.^2 .*(L^2 - 2*L*x + x.^2));
 % wp = (q/12*EI) .*x .*(L^2 - 2*L*x + x.*2) + (q/24*EI) .* (-2*L + 2*x);
 wpp = (q/EI)*(0.5 .*x.^2 - 0.5 * L .* x + (1/12)*L^2);
+
+% plots
 figure; hold on; grid on
 plot(x, w);
 plot([0:L/(N-2):1], vertical);
-% plot(wp);
+
 figure; hold on; grid on;
 plot(x, wpp);
 plot([0:L/(N-2):1], moments);
@@ -107,16 +110,16 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         Fg = globalFgeom(rho, Fg, EA, N, L_e);
 
         % apply BCs - fully fixed so remove 2 DoF at either end
-        Km = Km(3:2*N, 3:2*N);
-        Kg = Kg(3:2*N, 3:2*N);
-        Fm = Fm(3:2*N);
-        rho = rho(3:2*N);
+        KmBC  = Km(3:2*N, 3:2*N);
+        KgBC  = Kg(3:2*N, 3:2*N);
+        FmBC  = Fm(3:2*N);
+        rhoBC = rho(3:2*N);
         
         % initial functional G = K_M * rho - F_M
-        G = Km*rho + ((Km + Kg)^i)*rho- Fm;
+        G = KmBC*rhoBC + ((KmBC + KgBC)^i)*rhoBC - FmBC;
         
-        % run Newton Raphson iteration
-        rho_new = NewtonRaphson(rho, G, Km, Kg, Fm, EA, L);
+        % Newton Raphson iteration
+        rho_new = rhoBC - (KmBC + KgBC)\G;
         
         % update rho (replace lost BC elements)
         rho = [0; 0; rho_new; 0; 0];
@@ -125,99 +128,14 @@ function rho = nonLinearFE(L, EA, EI, q, N)
         Fg = globalFgeom(rho, Fg, EA, N, L_e);
         
         % apply BC to Fg
-        Fg = Fg(3:2*N);
+        FgBC = Fg(3:2*N);
         
         % new functional
-        G_new = Km*rho_new - Fm - Fg;
+        G_new = KmBC*rho_new - FmBC - FgBC;
         
         % error calculation
         eps = abs(G_new - G);
-        
-        % update other values
-        Km_new = zeros(2*N + 2, 2*N + 2);
-        Km_new(3:2*N, 3:2*N) = Km;
-        Kg_new = zeros(2*N + 2, 2*N + 2);
-        Kg_new(3:2*N, 3:2*N) = Kg;
-        Fm = [0; 0; Fm; 0; 0];
-        Fg = [0; 0; Fg; 0; 0];
 
         i = i + 1;
     end
 end
-
-
-
-
-%% UI sandbox
-% 
-% % setup window with grid, inputs panel and axes for results plot
-% fig = uifigure('Name', 'AERO96015 - FE Solver');
-% fig.Position = [200 200 1000 500];
-% grid1 = uigridlayout(fig,[2 1]);
-% grid1.RowHeight = {'1x',350};
-% p = uipanel(grid1,'Title','FE Solver');
-% ax = uiaxes(grid1);
-% ax.XGrid = 'on'; ax.YGrid = 'on';
-% 
-% % grid in the inputs panel
-% grid2 = uigridlayout(p,[4 3]);
-% grid2.RowHeight = {22,22,22,22,22,22};
-% grid2.ColumnWidth = {'1x','1x','1x','1x','1x','1x'};
-% 
-% % solver label
-% solver = uilabel(grid2);
-% solver.HorizontalAlignment = 'right';
-% solver.Text = 'Solver';
-% 
-% % solver drop-down
-% solver = uidropdown(grid2);
-% solver.Items = {'Linear', 'Geometrically Non-Linear'};
-% 
-% % beam length label
-% L = uilabel(grid2);
-% L.HorizontalAlignment = 'right';
-% L.Text = 'Beam length (m)';
-% 
-% % beam length field
-% L = uieditfield(grid2, 'numeric');
-% L.Value = 1;
-% 
-% % axial stiffness label
-% EA = uilabel(grid2);
-% EA.HorizontalAlignment = 'right';
-% EA.Text = 'Axial stiffness, EA (N)';
-% 
-% % axial stiffness field
-% EI = uieditfield(grid2, 'numeric');
-% EI.Value = 10e5;
-% 
-% % bending stiffness label
-% EI = uilabel(grid2);
-% EI.HorizontalAlignment = 'right';
-% EI.Text = 'Bending stiffness, EI (N m^2)';
-% 
-% % bending stiffness field
-% EI = uieditfield(grid2, 'numeric');
-% EI.Value = 10e2;
-% 
-% % distributed force label
-% q = uilabel(grid2);
-% q.HorizontalAlignment = 'right';
-% q.Text = 'Distributed force (kN/m)';
-% 
-% % distributed force field
-% q = uieditfield(grid2, 'numeric');
-% q.Value = 1;
-% 
-% % no. elements label
-% N = uilabel(grid2);
-% N.HorizontalAlignment = 'right';
-% N.Text = 'Number of elements';
-% 
-% % no. elements field
-% N = uieditfield(grid2, 'numeric');
-% N.Value = 1;
-% 
-% % Create a push button
-% btn = uibutton(fig,'push',...
-%                'ButtonPushedFcn', @(btn,event) linearFE(btn, L.Value, EA.Value, EI.Value, q.Value, N.value));
