@@ -1,11 +1,12 @@
 %GLOBALK global stiffness matrix. 
-%   globablK (K, Ke, e) places the element stiffness matrix into the
-%   appropriate position in the global stiffness matrix. Designed to be run
-%   for every element iteratively. Once all elements have been iterated
+%   globablK (K, EI, N, L_e) places the element stiffness matrix into the
+%   appropriate position in the global stiffness matrix. Runs for every
+%   element iteratively. Once all elements have been iterated
 %   over, the global stiffness matrix is complete.
-%   INPUTS: K  --> global stiffness matrix
-%           Ke --> element stiffness matrix
-%           e  --> element number
+%   INPUTS: K   --> global stiffness matrix
+%           EI  --> beam bending stiffness
+%           N   --> number of elements
+%           L_e --> element length
 %   OUTPUT: K  --> updated global stiffness matrix
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 function K = globalK(K, EI, N, L_e)

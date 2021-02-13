@@ -9,18 +9,17 @@
 %     i,j=4: rotation at second node. 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function Fnl=Fgeom(rhoe,EA,L)
+    % Compute the derivative of the displacements in the element.
+    Wprime= @(x)shapeder(x,L,1)*rhoe(1) ...
+               +shapeder(x,L,2)*rhoe(2) ...
+               +shapeder(x,L,3)*rhoe(3) ...
+               +shapeder(x,L,4)*rhoe(4);
 
-% Compute the derivative of the displacements in the element.
-Wprime= @(x)shapeder(x,L,1)*rhoe(1) ...
-           +shapeder(x,L,2)*rhoe(2) ...
-           +shapeder(x,L,3)*rhoe(3) ...
-           +shapeder(x,L,4)*rhoe(4);
-
-% Evaluate the elements of the geometric stiffness matrix.
-for i=1:4
-    Fun= @(x)(-EA/2)*(Wprime(x).^3).*shapeder(x,L,i);
-    Fnl(i,1)=quadl(Fun,0,L);
-end
+    % Evaluate the elements of the geometric stiffness matrix.
+    for i=1:4
+        Fun= @(x)(-EA/2)*(Wprime(x).^3).*shapeder(x,L,i);
+        Fnl(i,1)=quadl(Fun,0,L);
+    end
 end
 
 % eof

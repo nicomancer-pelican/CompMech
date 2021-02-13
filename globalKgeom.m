@@ -1,12 +1,14 @@
 %GLOBALKGEOM global geometric stiffness matrix. 
-%   globablKgeom (K, Ke, e) places the element stiffness matrix into the
-%   appropriate position in the global stiffness matrix. Designed to be run
-%   for every element iteratively. Once all elements have been iterated
-%   over, the global stiffness matrix is complete.
-%   INPUTS: Kg --> global stiffness matrix
-%           Ke --> element stiffness matrix
-%           e  --> element number
-%   OUTPUT: Kg  --> updated global stiffness matrix
+%   globablKgeom (rho, Kg, EA, N, L_e) places the element stiffness matrix
+%   into the appropriate position in the global stiffness matrix. Runs for
+%   every element iteratively. Once all elements have been iterated over,
+%   the global stiffness matrix is complete.
+%   INPUTS: rho  --> displacement and rotation vector
+%           Kg   --> global geometric stiffness matrix
+%           EA   --> beam axial stiffness
+%           N    --> number of elements
+%           L_e  --> element length
+%   OUTPUT: Kg  --> updated global geometric stiffness matrix
 %%%%%%%%%%%%%%%%%%%%%%%%%%%
 function Kg = globalKgeom(rho, Kg, EA, N, L_e)
     for e = 1:N

@@ -1,12 +1,13 @@
 %GLOBALF global force vector
-%   globablF (F, Fe, e) places the element force vector into the
-%   appropriate position in the global force vector. Designed to be run
-%   for every element iteratively. Once all elements have been iterated
+%   globablF (F, q, N, L_e) places the element force vector into the
+%   appropriate position in the global force vector. Runs for every element
+%   iteratively. Once all elements have been iterated
 %   over, the global force vector is complete.
-%   INPUTS: F  --> global force vector
-%           Fe --> element force vector
-%           e  --> element number
-%   OUTPUT: K  --> updated global force vector
+%   INPUTS: F   --> global force vector
+%           q   --> applied force
+%           N   --> number of elements
+%           L_e --> element length
+%   OUTPUT: F  --> updated global force vector
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 function F = globalF(F, q, N, L_e)
     for e = 1:N

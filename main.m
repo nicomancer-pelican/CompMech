@@ -1,126 +1,123 @@
 % np3217 01333401
 % Computational Mechanics Coursework
 
-% Main run file - assembly i.e. global strain matrix
-
-% this calls element functions within a for loop (running through all
-% elements) - uses index "e" for an arbitary number of N elemets
-% this uses given functions:
-% linear element stiffness: Kmat.m
-% non linear element force: Fgeom.m
-% first derivatives of Fgeom for Newton Raphson: Kgeom.m
-
-% the bottom layer called from the above includes the shape functions (and
-% material properties). shape.m, shapeder.m, shapder2.m to find matrix N 
-% and its first and second derivatives.
-
-%%
-% inputs: [L, EA, EI q, N] = [beam length, axial stiffness, bending 
-% stiffness, distibuted force, number of elements]
-% Additionally: whether to use linear or non linear solver
-% Are the BCs hard coded?
-
-%% main driver
-% ask user linear or non-linear
-% get required inputs from user
-% run appropriate solver
-% display results
-
 clear; clc; close all;
 L = 1;
 EA = 1e5;
 EI = 1e2;
-q = 1e3;
-N = 50;
 
-displacements = linearFE(L, EI, q, N);
-displacements_NL = nonLinearFE(L, EA, EI, q, N);
-
-% split rho into vertical displacements and moments
-disc = 0:L/(N-2):1;
-% linear
-vertical  = displacements(1:2:2*N-2);
-rotations = displacements(2:2:2*N-2);
-moments   = gradient(displacements(2:2:2*N-2))*EI;
-% non linear
-vertical_NL  = displacements_NL(1:2:2*N-2);
-rotations_NL = displacements_NL(2:2:2*N-2);
-moments_NL   = gradient(displacements_NL(2:2:2*N-2))*EI;
-
-% analytical
-x   = 0:0.01:L;
-w   = (q/(24*EI)) * x.^2 .*(L^2 - 2*L*x + x.^2);
-wp  = (q/(24*EI)) *(2*x*L^2 - 6*L*x.^2 + 4*x.^3);
-wpp = (q/(24*EI)) *(2*L^2 - 12*L.*x + 12*x.^2);
-
-% plots
-figure; hold on; grid on
-plot(x, w);
-plot(disc, vertical);
-plot(disc, vertical_NL);
-legend('analytical', 'FE Linear', 'FE Non Linear')
-
-figure; hold on; grid on;
-plot(x, wp);
-plot(disc, rotations);
-plot(disc, rotations_NL);
-legend('analytical', 'FE', 'FE Non Linear')
-
-figure; hold on; grid on;
-plot(x, wpp);
-plot(disc, moments);
-plot(disc, moments_NL);
-legend('analytical', 'FE', 'FE Non Linear')
-
-
-%% NON-LINEAR FE SOLVER 2
-function rho = nonLinearFE(L, EA, EI, q, N)
-    % preallocate global stiffness matrices and global force vectors and
-    % global displacement vector
-    Km = zeros(2*N + 2);
-    Kg = zeros(2*N + 2);
-    Fm = zeros(2*N + 2, 1);
-    Fg = zeros(2*N + 2, 1);
-    rho_old = zeros(2*N + 2, 1);
-    
-    % element properties
-    L_e = L / N; %element length assuming equal length elements
-    
-    % set arbitrary error to jumpstart loop
-    eps = 1;
-    
-    % setup
-    Km = globalK(Km, EI, N, L_e);
-    Fm = globalF(Fm,  q, N, L_e);
-    
-    while eps > 0.1      
-        Kg = globalKgeom(rho_old, Kg, EA, N, L_e);
-        Fg = globalFgeom(rho_old, Fg, EA, N, L_e);
-
-        % functional
-        G_old       = Km*rho_old - Fm - Fg;
-        G_old_prime = Km + Kg;
-
-        % apply BCS
-        rho_old_BC = rho_old(3:2*N);
-        G_old_BC   = G_old(3:2*N);
-        G_old_prime_BC = G_old_prime(3:2*N, 3:2*N);
-        
-        % Newton Raphson iteration with BCs
-        rho_new = [0; 0; rho_old_BC - G_old_prime_BC\G_old_BC; 0; 0];
-        
-        % updates using rho_new
-        Fg_new = globalFgeom(rho_new, Fg, EA, N, L_e);
-        G_new = Km*rho_new - Fm - Fg_new;
-        rho_old = rho_new;
-        
+%% Plots
+q = [1,2,5];
+N = [50:5:200];
+linearError    = zeros(11,3);
+nonlinearError = linearError;
+for i = 1:31
+    for k = 1:3
+        % linear solver
+        displacements = linearFE(L, EI, q(k), N(i));
+        vertical  = displacements(1:2:2*N(i)-2);
+        rotations = displacements(2:2:2*N(i)-2);
+        % non linear solver
+        displacements_NL = nonLinearFE(L, EA, EI, q(k), N(i));
+        vertical_NL  = displacements_NL(1:2:2*N(i)-2);
+        rotations_NL = displacements_NL(2:2:2*N(i)-2);
         % error calculation
-        eps = max(abs(G_new - G_old));
+        error_x = 0:L/(N(i)-2):L;
+        error_w = (q(k)/(24*EI)) * error_x.^2 .*(L^2 - 2*L*error_x + error_x.^2);
+        linearError(i,k)    = max(abs(vertical - error_w'));
+        nonlinearError(i,k) = max(abs(vertical_NL - error_w'));
     end
-    rho = rho_new;
 end
 
+%% Question 2
+figure; hold on; grid on
+% q = 1kN
+loglog(linearError(:,1), N, 'x-', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+% q = 2kN
+loglog(linearError(:,2), N, 'o--', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+% q = 5kN
+loglog(linearError(:,3), N, '+:', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+% prettiness
+title('Linear Solver Convergence', 'interpreter', 'latex')
+legend('Linear FE Solver, $q = 1 kN$', 'Linear FE Solver, $q = 2 kN$', ...
+    'Linear FE Solver, $q = 5 kN$', 'interpreter', 'latex')
+xlabel('Error', 'interpreter', 'latex')
+ylabel('No. Elements', 'interpreter', 'latex')
 
+set(gca, 'YScale', 'log')
+set(gca, 'XScale', 'log')
+%% Question 5 figure 1
+figure; hold on; grid on
+% q = 1kN
+loglog(nonlinearError(:,1), N, 'x-', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% q = 2kN
+loglog(nonlinearError(:,2), N, 'o--', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% q = 5kN
+loglog(nonlinearError(:,3), N, '+:', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% prettiness
+title('Nonlinear Solver Convergence', 'interpreter', 'latex')
+legend('Nonlinear FE Solver, $q = 1 kN$', 'Nonlinear FE Solver, $q = 2 kN$', ...
+    'Nonlinear FE Solver, $q = 5 kN$', 'interpreter', 'latex')
+xlabel('Error', 'interpreter', 'latex')
+ylabel('No. Elements', 'interpreter', 'latex')
 
+set(gca, 'YScale', 'log')
+set(gca, 'XScale', 'log')
+%% Question 5 figure 2
+figure; hold on; grid on
+% q = 1kN
+loglog(linearError(:,1), N, 'x-', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+loglog(nonlinearError(:,1), N, 'x-', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% q = 2kN
+loglog(linearError(:,2), N, 'o--', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+loglog(nonlinearError(:,2), N, 'o--', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% q = 5kN
+loglog(linearError(:,3), N, '+:', 'linewidth', 2, 'color', [0 0.4470 0.7410])
+loglog(nonlinearError(:,3), N, '+:', 'linewidth', 2, 'color', [0.8500 0.3250 0.0980])
+% prettiness
+title('Comparison of Convergence', 'interpreter', 'latex')
+legend('Linear FE Solver, $q = 1 kN$', 'Nonlinear FE Solver, $q = 1 kN$'...
+    , 'Linear FE Solver, $q = 2 kN$', 'Nonlinear FE Solver, $q = 2 kN$' ...
+    , 'Linear FE Solver, $q = 5 kN$', 'Nonlinear FE Solver, $q = 5 kN$' ...
+    , 'interpreter', 'latex')
+xlabel('Error', 'interpreter', 'latex')
+ylabel('No. Elements', 'interpreter', 'latex')
 
+set(gca, 'YScale', 'log')
+set(gca, 'XScale', 'log')
+%% Question 3
+clear;
+L = 1;
+EA = 1e5;
+EI = 1e2;
+q = [1,2,5];
+N = 60;
 
+x = 0:1/58:L;
+
+for i = 1:3
+    % linear solver
+    displacements = linearFE(L, EI, q(i), N);
+    vertical(:,i)  = displacements(1:2:2*N-2);
+    rotations(:,i) = displacements(2:2:2*N-2);
+    % analytical
+    w(:,i)   = (q(i)/(24*EI)) * x.^2 .*(L^2 - 2*L*x + x.^2);
+end
+
+figure; hold on; grid on
+% analytical
+plot(x, w(:,1), 'linewidth', 2, 'color', [0.4660 0.6740 0.1880])
+plot(x, w(:,2), 'linewidth', 2, 'color', [0.4660 0.6740 0.1880])
+plot(x, w(:,3), 'linewidth', 2, 'color', [0.4660 0.6740 0.1880])
+% linear
+plot(x, vertical(:,1), 'linewidth', 2, 'color', [0.3010 0.7450 0.9330])
+plot(x, vertical(:,2), 'linewidth', 2, 'color', [0.3010 0.7450 0.9330])
+plot(x, vertical(:,3), 'linewidth', 2, 'color', [0.3010 0.7450 0.9330])
+% prettiness)
+title('Linear FE Solver Displacement Comparison', 'interpreter', 'latex')
+legend('Analytical Result, $q = 1 kN$', 'Analytical Result, $q = 2 kN$'...
+    , 'Analytical Result, $q = 5 kN$', 'Linear FE Solver, $q = 1 kN$'...
+    , 'Linear FE Solver, $q = 2 kN$', 'Linear FE Solver, $q = 5 kN$'...
+    , 'interpreter', 'latex')
+xlabel('Length of Beam, m', 'interpreter', 'latex')
+ylabel('Vertical Displacement, m', 'interpreter', 'latex')
